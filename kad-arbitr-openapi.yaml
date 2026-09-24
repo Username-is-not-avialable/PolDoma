@@ -1,0 +1,716 @@
+openapi: 3.0.2
+info:
+  title: API parser-api.com kad.arbitr.ru
+  description: Сервис поддерживает четыре типа запросов для работы с делами арбитражных судов.
+  version: 1.0.0
+servers:
+  - url: https://parser-api.com/parser/arbitr_api
+tags:
+  - name: Поиск дел
+    description: Поиск дел по различным параметрам.
+  - name: Детальная информация
+    description: Получение подробной информации о деле по его номеру или уникальному идентификатору.
+  - name: Документы
+    description: Скачивание PDF документов судебных дел.
+
+paths:
+  /search:
+    get:
+      tags:
+        - Поиск дел
+      summary: Поиск дел
+      description: Для поиска дел используйте следующий запрос.
+      parameters:
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Ключ доступа к API.
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Номер страницы поисковой выдачи. По умолчанию загружается первая страница.
+        - name: Inn
+          in: query
+          required: false
+          schema:
+            type: string
+          description: ИНН или наименование участника процесса.
+        - name: InnType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Any, Plaintiff, Respondent, Third, Other]
+          description: Тип участника процесса (Any - Любой, Plaintiff - Истец, Respondent - Ответчик, Third - Третье лицо, Other - Иное лицо).
+        - name: DateFrom
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Дата, с которой начинается поиск (формат YYYY-MM-DD).
+        - name: DateTo
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Дата, по которую ведется поиск (формат YYYY-MM-DD).
+        - name: Court
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Наименование суда (точно как на kad.arbitr.ru).
+        - name: CaseType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [A, B, G]
+          description: Тип дела (A - административное, B - банкротное, G - гражданское).
+      responses:
+        '200':
+          description: Успешный ответ.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Success:
+                    type: integer
+                    description: Флаг успешного выполнения запроса (1 - успех).
+                  Cases:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        CaseId:
+                          type: string
+                          format: uuid
+                          description: Уникальный идентификатор дела.
+                        CaseNumber:
+                          type: string
+                          description: Номер дела.
+                        CaseType:
+                          type: string
+                          description: Тип дела (А - административное, Б - банкротное, Г - гражданское).
+                        Court:
+                          type: string
+                          description: Наименование суда.
+                        StartDate:
+                          type: string
+                          format: date
+                          description: Дата регистрации дела.
+                        Plaintiffs:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              Name:
+                                type: string
+                                description: Наименование истца.
+                              Address:
+                                type: string
+                                nullable: true
+                                description: Адрес истца.
+                              Inn:
+                                type: string
+                                description: ИНН истца.
+                        Respondents:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              Name:
+                                type: string
+                                description: Наименование ответчика.
+                              Address:
+                                type: string
+                                nullable: true
+                                description: Адрес ответчика.
+                              Inn:
+                                type: string
+                                description: ИНН ответчика.
+                  PagesCount:
+                    type: integer
+                    description: Общее количество страниц с результатами поиска.
+              example:
+                Success: 1
+                Cases:
+                  - CaseId: "7057cbe9-910b-43ab-98f6-97293fbfd6ff"
+                    CaseNumber: "А40-180791/2024"
+                    CaseType: "Б"
+                    Court: "АС города Москвы"
+                    StartDate: "2024-08-05"
+                    Plaintiffs:
+                      - Name: "ПАО \"НОРВИК БАНК\""
+                        Address: "115054, Россия, г Москва, г. Москва, ул. Зацепский вал, д. 5"
+                        Inn: "4346001485"
+                    Respondents:
+                      - Name: "Фамилия Имя Отчество"
+                        Address: null
+                        Inn: "463406307502"
+                PagesCount: 1
+        '400':
+          description: Ошибка валидации запроса.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Сообщение об ошибке.
+                  error_code:
+                    type: integer
+                    description: Код ошибки.
+              example:
+                error: "Invalid case type"
+                error_code: 40001
+        '403':
+          description: Ошибка ограничения доступа.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Сообщение об ошибке.
+                  error_code:
+                    type: integer
+                    description: Код ошибки.
+              examples:
+                InvalidAccessKey:
+                  value:
+                    error: "Invalid access key"
+                    error_code: 40301
+                SubscriptionExpired:
+                  value:
+                    error: "The subscription period has expired"
+                    error_code: 40302
+                InvalidIP:
+                  value:
+                    error: "Invalid IP"
+                    error_code: 40303
+                DayLimitExceeded:
+                  value:
+                    error: "Day limit of requests exceeded"
+                    error_code: 40304
+                MonthLimitExceeded:
+                  value:
+                    error: "Month limit of requests exceeded"
+                    error_code: 40305
+  /details_by_number:
+    get:
+      tags:
+        - Детальная информация
+      summary: Получение детальной информации по номеру дела
+      description: Для получения детальной информации по номеру дела используйте следующий запрос.
+      parameters:
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Ключ доступа к API.
+        - name: CaseNumber
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Номер дела.
+      responses:
+        '200':
+          description: Успешный ответ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseDetailsResponse'
+        '400':
+          description: Ошибка валидации запроса.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Сообщение об ошибке.
+                  error_code:
+                    type: integer
+                    description: Код ошибки.
+              example:
+                error: "Invalid case type"
+                error_code: 40001
+        '403':
+          description: Ошибка ограничения доступа.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Сообщение об ошибке.
+                  error_code:
+                    type: integer
+                    description: Код ошибки.
+              examples:
+                InvalidAccessKey:
+                  value:
+                    error: "Invalid access key"
+                    error_code: 40301
+                SubscriptionExpired:
+                  value:
+                    error: "The subscription period has expired"
+                    error_code: 40302
+                InvalidIP:
+                  value:
+                    error: "Invalid IP"
+                    error_code: 40303
+                DayLimitExceeded:
+                  value:
+                    error: "Day limit of requests exceeded"
+                    error_code: 40304
+                MonthLimitExceeded:
+                  value:
+                    error: "Month limit of requests exceeded"
+                    error_code: 40305
+  /details_by_id:
+    get:
+      tags:
+        - Детальная информация
+      summary: Получение детальной информации по ID дела
+      description: Для получения детальной информации по уникальному идентификатору дела используйте следующий запрос.
+      parameters:
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Ключ доступа к API.
+        - name: CaseId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Уникальный идентификатор дела.
+      responses:
+        '200':
+          description: Успешный ответ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseDetailsResponse'
+        '400':
+          description: Ошибка валидации запроса.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Сообщение об ошибке.
+                  error_code:
+                    type: integer
+                    description: Код ошибки.
+              example:
+                error: "Invalid case type"
+                error_code: 40001
+        '403':
+          description: Ошибка ограничения доступа.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Сообщение об ошибке.
+                  error_code:
+                    type: integer
+                    description: Код ошибки.
+              examples:
+                InvalidAccessKey:
+                  value:
+                    error: "Invalid access key"
+                    error_code: 40301
+                SubscriptionExpired:
+                  value:
+                    error: "The subscription period has expired"
+                    error_code: 40302
+                InvalidIP:
+                  value:
+                    error: "Invalid IP"
+                    error_code: 40303
+                DayLimitExceeded:
+                  value:
+                    error: "Day limit of requests exceeded"
+                    error_code: 40304
+                MonthLimitExceeded:
+                  value:
+                    error: "Month limit of requests exceeded"
+                    error_code: 40305
+  /pdf_download:
+    get:
+      tags:
+        - Документы
+      summary: Скачивание PDF документов
+      description: Для скачивания PDF файлов судебных документов с сайта kad.arbitr.ru используйте следующий запрос.
+      parameters:
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Ключ доступа к API.
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Полный URL PDF документа с сайта kad.arbitr.ru.
+          example: "https://kad.arbitr.ru/PdfDocument/63778dcd-c696-4863-b781-73a839cbf8a8/A71-1202-2015_20150507_Reshenija%20i%20postanovlenija.pdf"
+      responses:
+        '200':
+          description: Успешный ответ.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Success:
+                    type: integer
+                    description: Флаг успешного выполнения запроса (1 - успех).
+                  pdfContent:
+                    type: string
+                    nullable: true
+                    description: Содержимое PDF в формате base64. Если PDF не найден, возвращается null.
+              examples:
+                Success:
+                  value:
+                    Success: 1
+                    pdfContent: "JVBERi0xLjQKJeLjz9MKMy..."
+                NotFound:
+                  value:
+                    Success: 1
+                    pdfContent: null
+        '400':
+          description: Ошибка валидации запроса.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Сообщение об ошибке.
+                  error_code:
+                    type: string
+                    description: Код ошибки.
+              examples:
+                InvalidUrl:
+                  value:
+                    error: "Invalid pdf url"
+                    error_code: "40001"
+        '403':
+          description: Ошибка ограничения доступа.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Сообщение об ошибке.
+                  error_code:
+                    type: integer
+                    description: Код ошибки.
+              examples:
+                InvalidAccessKey:
+                  value:
+                    error: "Invalid access key"
+                    error_code: 40301
+                SubscriptionExpired:
+                  value:
+                    error: "The subscription period has expired"
+                    error_code: 40302
+                InvalidIP:
+                  value:
+                    error: "Invalid IP"
+                    error_code: 40303
+                DayLimitExceeded:
+                  value:
+                    error: "Day limit of requests exceeded"
+                    error_code: 40304
+                MonthLimitExceeded:
+                  value:
+                    error: "Month limit of requests exceeded"
+                    error_code: 40305
+
+components:
+  schemas:
+    CaseDetailsResponse:
+      type: object
+      properties:
+        Success:
+          type: integer
+          description: Флаг успешного выполнения запроса (1 - успех).
+        Cases:
+          type: array
+          items:
+            type: object
+            properties:
+              CaseId:
+                type: string
+                format: uuid
+                description: Уникальный идентификатор дела.
+              CaseNumber:
+                type: string
+                description: Номер дела.
+              CaseType:
+                type: string
+                description: Тип дела (А - административное, Б - банкротное, Г - гражданское).
+              Plaintiffs:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    Name:
+                      type: string
+                      description: Наименование истца.
+                    Address:
+                      type: string
+                      nullable: true
+                      description: Адрес истца.
+                    Id:
+                      type: string
+                      format: uuid
+                      description: Уникальный идентификатор истца.
+              Respondents:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    Name:
+                      type: string
+                      description: Наименование ответчика.
+                    Address:
+                      type: string
+                      nullable: true
+                      description: Адрес ответчика.
+                    Id:
+                      type: string
+                      format: uuid
+                      description: Уникальный идентификатор ответчика.
+              StartDate:
+                type: string
+                format: date
+                description: Дата регистрации дела.
+              State:
+                type: string
+                description: Состояние дела.
+              Finished:
+                type: boolean
+                description: Закрыто ли дело.
+              CaseInstances:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    Id:
+                      type: string
+                      format: uuid
+                      description: Уникальный идентификатор инстанции.
+                    InstanceNumber:
+                      type: string
+                      description: Номер инстанции.
+                    Name:
+                      type: string
+                      description: Тип инстанции.
+                    State:
+                      type: string
+                      description: Дополнительная информация об инстанции.
+                    Court:
+                      type: object
+                      properties:
+                        Code:
+                          type: string
+                          description: Код суда.
+                        Name:
+                          type: string
+                          description: Наименование суда.
+                    File:
+                      type: object
+                      properties:
+                        Name:
+                          type: string
+                          description: Наименование файла.
+                        URL:
+                          type: string
+                          format: uri
+                          description: Ссылка на файл.
+                    Judges:
+                      type: array
+                      items:
+                        type: string
+                      description: Список судей.
+                    MoiArbitrDocuments:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          PublishDate:
+                            type: string
+                            format: date-time
+                            description: Дата публикации документа.
+                          RegisterDate:
+                            type: string
+                            format: date
+                            description: Дата регистрации документа.
+                          DocumentName:
+                            type: string
+                            description: Тип/название документа.
+                          CourtName:
+                            type: string
+                            description: Суд.
+                    InstanceEvents:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          EventTypeName:
+                            type: string
+                            description: Тип события.
+                          EventTypeId:
+                            type: string
+                            format: uuid
+                            description: Уникальный идентификатор типа события.
+                          Id:
+                            type: string
+                            format: uuid
+                            description: Уникальный идентификатор события.
+                          AdditionalInfo:
+                            type: string
+                            description: Дополнительная информация о событии.
+                          Date:
+                            type: string
+                            format: date
+                            description: Дата регистрации события.
+                          File:
+                            type: string
+                            format: uri
+                            description: Файл с документом по событию.
+                          PublishDate:
+                            type: string
+                            format: date
+                            description: Дата публикации события.
+                          FinishEvent:
+                            type: integer
+                            description: Является ли событие закрывающим (решением).
+                          EventContentTypeName:
+                            type: string
+                            description: Тип содержания документа.
+                          Declarer:
+                            type: string
+                            description: Заявитель.
+                          DeclarerInn:
+                            type: string
+                            description: ИНН заявителя.
+                          Comment:
+                            type: string
+                            description: Комментарий.
+                          DecisionTypeName:
+                            type: string
+                            nullable: true
+                            description: Тип решения.
+                          HasSignature:
+                            type: integer
+                            description: Подписано ли событие.
+                          ClaimSum:
+                            type: number
+                            description: Сумма исковых требований.
+              CourtHearings:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    Location:
+                      type: string
+                      description: Адрес судебного заседания.
+                    Summary:
+                      type: string
+                      description: Комментарий к заседанию.
+                    Start:
+                      type: string
+                      format: date-time
+                      description: Дата начала заседания.
+                    End:
+                      type: string
+                      format: date-time
+                      description: Дата окончания заседания.
+      example:
+        Success: 1
+        Cases:
+          - CaseId: "6fb9afec-b71d-4183-b917-4cace5958c16"
+            CaseNumber: "А71-1202/2015"
+            CaseType: "А"
+            Plaintiffs:
+              - Name: "ООО \"Детство\""
+                Address: "101000, ул. Петровка 17/3-19 (Мансурову М.С.), Москва г."
+                Id: "3c79f2f9-c07f-4cfe-92a1-eb495e3fd2de"
+            Respondents:
+              - Name: "Межрайонная ИФНС России №9 по Удмуртской Республике"
+                Address: "426003, ул. Карла Маркса, 130, г. Ижевск"
+                Id: "b49d872b-2fd3-4802-904d-8c8565ad6fea"
+            StartDate: "2015-02-06"
+            State: "Рассмотрение дела завершено"
+            Finished: true
+            CaseInstances:
+              - Id: "5400123c-5c8a-4421-a839-c130938086c2"
+                InstanceNumber: "А71-1202/15"
+                Name: "Первая инстанция"
+                State: "Следующее заседание: 18.11.2020, 10:15 , №217 Матвеева Н.В."
+                Court:
+                  Code: "UDMURTIYA"
+                  Name: "АС Удмуртской Республики"
+                File:
+                  Name: "A71-1202-2015_20150507_Reshenija i postanovlenija.pdf"
+                  URL: "https://kad.arbitr.ru/PdfDocument/63778dcd-c696-4863-b781-73a839cbf8a8/A71-1202-2015_20150507_Reshenija%20i%20postanovlenija.pdf"
+                Judges:
+                  - "Бушуева Е. А."
+                MoiArbitrDocuments:
+                  - PublishDate: "2016-11-21 10:25:00"
+                    RegisterDate: "2016-11-21"
+                    DocumentName: "Отзыв"
+                    CourtName: "АС Удмуртской Республики"
+                InstanceEvents:
+                  - EventTypeName: "Определение"
+                    EventTypeId: "3f4a11f5-b269-4fe8-8243-957b5260c3d1"
+                    Id: "8d0e1fc6-9df7-46bb-8530-10a971190666"
+                    AdditionalInfo: "Дата и время судебного заседания 20.01.2016, 11:00, 22"
+                    Date: "2015-12-11"
+                    File: "https://kad.arbitr.ru/PdfDocument/8d0e1fc6-9df7-46bb-8530-10a971190666/A71-1202-2015_20151211_Opredelenie.pdf"
+                    PublishDate: "2015-12-12"
+                    FinishEvent: 0
+                    EventContentTypeName: "Об отложении рассмотрения заявления/жалобы"
+                    Declarer: "АНО ДАЧНОЕ НЕКОММЕРЧЕСКОЕ ТОВАРИЩЕСТВО ВНИИКОП-ОСТРОВ"
+                    DeclarerInn: "5003079985"
+                    Comment: "заявителю на руки в заседании, ответчику на руки в ячейке"
+                    DecisionTypeName: null
+                    HasSignature: 0
+                    ClaimSum: 10000
+            CourtHearings:
+              - Location: "426011, Ижевск, ул. Ломоносова 5, 22"
+                Summary: "Заседание по делу А71-1202/2015 в АС Удмуртской Республики. Судья Бушуева Е. А."
+                Start: "2015-03-19T11:00:00+04"
+                End: "2015-03-19T12:00:00+04"
