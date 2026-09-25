@@ -106,11 +106,16 @@ async def run_monitoring_cycle(
         if max_pages is None:
             max_pages = settings.kad_max_pages_per_poll
 
+        # Пустой KAD_POLL_CASE_TYPES (или пустой аргумент) = один запрос
+        # «без фильтра»: поле CaseType не передаётся, КАД возвращает все
+        # типы дел (G/A/B) сразу — как ручной поиск на сайте.
+        poll_types: list[str | None] = list(case_types) or [None]
+
         logger.info(
             "Старт цикла мониторинга КАД: date=%s, courts=%s, case_types=%s",
             target_date,
             courts,
-            case_types,
+            "все (без фильтра)" if poll_types == [None] else poll_types,
         )
 
         # 1. Загружаем активные контакты из БД
@@ -124,6 +129,7 @@ async def run_monitoring_cycle(
 
         stats = {
             "target_date": target_date,
+            "case_types": [ct or "ALL" for ct in poll_types],
             "total_cases_found": 0,
             "new_cases_saved": 0,
             "matches_found": 0,
@@ -132,10 +138,10 @@ async def run_monitoring_cycle(
             "errors": [],
         }
 
-        # 2. Итерируемся по типам дел и судам
+        # 2. Итерируемся по типам дел (одна итерация [None] = без фильтра)
         seen_guids: set[str] = set()
 
-        for c_type in case_types:
+        for c_type in poll_types:
             try:
                 async for kad_case in iter_cases(
                     date_from=target_date,
@@ -223,8 +229,8 @@ async def run_monitoring_cycle(
                             await session.commit()
 
             except Exception as exc:  # noqa: BLE001
-                logger.error("Ошибка при опросе КАД (тип=%s): %s", c_type, exc)
-                stats["errors"].append(f"KAD error ({c_type}): {exc}")
+                logger.error("Ошибка при опросе КАД (тип=%s): %s", c_type or "все", exc)
+                stats["errors"].append(f"KAD error ({c_type or 'ALL'}): {exc}")
 
         logger.info("Цикл мониторинга КАД завершён: %s", stats)
         return stats

@@ -341,3 +341,76 @@ async def test_cycle_skips_when_already_running(session_factory, contact):
     async with monitor._monitoring_lock:
         stats = await monitor.run_monitoring_cycle(target_date="2026-09-25")
     assert stats == {"status": "skipped", "reason": "already_running"}
+
+
+# ------------------------- KAD_POLL_CASE_TYPES: пустой список = без фильтра -------------------------
+
+
+async def test_cycle_empty_case_types_makes_single_unfiltered_request(
+    session_factory, contact
+):
+    """Пустой case_types → ровно один запрос к КАД без поля CaseType."""
+    calls: list[dict[str, Any]] = []
+
+    async def fake_iter_cases(**kwargs: Any) -> AsyncIterator[KadCase]:
+        calls.append(kwargs)
+        yield make_kad_case()
+
+    original_factory = monitor.async_session_factory
+    original_iter = monitor.iter_cases
+    original_send = monitor.send_case_notification
+    monitor.async_session_factory = session_factory
+    monitor.iter_cases = fake_iter_cases
+    monitor.send_case_notification = AsyncMock(return_value={"status": "sent"})
+    try:
+        stats = await monitor.run_monitoring_cycle(
+            target_date="2026-09-25",
+            case_types=[],
+            courts=["EKATERINBURG"],
+            max_pages=1,
+        )
+    finally:
+        monitor.async_session_factory = original_factory
+        monitor.iter_cases = original_iter
+        monitor.send_case_notification = original_send
+
+    # Один запрос, переданный case_type — None (поле CaseType не попадёт в тело)
+    assert len(calls) == 1
+    assert calls[0]["case_type"] is None
+    assert stats["case_types"] == ["ALL"]
+    assert stats["total_cases_found"] == 1
+    assert stats["new_cases_saved"] == 1
+    assert stats["errors"] == []
+
+
+async def test_cycle_explicit_case_types_make_one_request_per_type(
+    session_factory, contact
+):
+    """Непустой case_types → отдельный запрос на каждый тип."""
+    calls: list[dict[str, Any]] = []
+
+    async def fake_iter_cases(**kwargs: Any) -> AsyncIterator[KadCase]:
+        calls.append(kwargs)
+        return
+        yield  # pragma: no cover — делает функцию async-генератором
+
+    original_factory = monitor.async_session_factory
+    original_iter = monitor.iter_cases
+    original_send = monitor.send_case_notification
+    monitor.async_session_factory = session_factory
+    monitor.iter_cases = fake_iter_cases
+    monitor.send_case_notification = AsyncMock(return_value={"status": "sent"})
+    try:
+        stats = await monitor.run_monitoring_cycle(
+            target_date="2026-09-25",
+            case_types=["G", "A"],
+            courts=["EKATERINBURG"],
+            max_pages=1,
+        )
+    finally:
+        monitor.async_session_factory = original_factory
+        monitor.iter_cases = original_iter
+        monitor.send_case_notification = original_send
+
+    assert [c["case_type"] for c in calls] == ["G", "A"]
+    assert stats["case_types"] == ["G", "A"]

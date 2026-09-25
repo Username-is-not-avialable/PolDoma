@@ -29,8 +29,11 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = True
     kad_poll_interval_minutes: int = 15
     kad_poll_courts: list[str] = ["EKATERINBURG"]
-    kad_poll_case_types: list[str] = ["G", "A", "B"]
-    kad_max_pages_per_poll: int = 2
+    # Пустой список = один запрос «без фильтра» (все типы дел G/A/B сразу).
+    # Непустой — отдельный запрос на каждый тип (гарантированная глубина
+    # выборки каждого типа при ограничении kad_max_pages_per_poll).
+    kad_poll_case_types: list[str] = []
+    kad_max_pages_per_poll: int = 50
 
     # SMTP для email-рассылки
     smtp_host: str = "smtp.yandex.ru"
