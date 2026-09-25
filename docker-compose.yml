@@ -17,6 +17,31 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    build: .
+    container_name: poldoma_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # Вся конфигурация (KAD_*, SMTP_*, SCHEDULER_*) берётся из .env
+    env_file:
+      - .env
+    environment:
+      # Внутри compose-сети БД доступна как хост `db`, порт 5432
+      # (перекрывает DATABASE_URL из .env, где указан localhost:5434)
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-poldoma_user}:${POSTGRES_PASSWORD:-poldoma_pass}@db:5432/${POSTGRES_DB:-poldoma}
+    ports:
+      - "8000:8000"
+    # Один контейнер = один процесс = один планировщик. Реплики/воркеры
+    # запрещены (см. комментарий в Dockerfile к --workers 1).
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if b'healthy' in urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read() else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
 volumes:
   poldoma_pgdata:
 
