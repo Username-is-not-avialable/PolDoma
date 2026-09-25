@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://poldoma_user:poldoma_pass@localhost:5434/poldoma"
     db_echo: bool = False
 
+    # Настройки периодического опроса КАД и планировщика
+    scheduler_enabled: bool = True
+    kad_poll_interval_minutes: int = 15
+    kad_poll_courts: list[str] = ["EKATERINBURG"]
+    kad_poll_case_types: list[str] = ["G", "A", "B"]
+    kad_max_pages_per_poll: int = 2
+
     # SMTP для email-рассылки
     smtp_host: str = "smtp.yandex.ru"
     smtp_port: int = 465
@@ -35,6 +42,7 @@ class Settings(BaseSettings):
     smtp_from_email: str = ""       # адрес отправителя (если пусто, берётся smtp_user)
     smtp_from_name: str = "ПолдОма"  # отображаемое имя отправителя
     smtp_timeout: float = 30.0      # таймаут сетевого подключения (сек)
+
 
 
 settings = Settings()
