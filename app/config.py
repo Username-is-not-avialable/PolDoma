@@ -21,5 +21,9 @@ class Settings(BaseSettings):
     kad_search_date_from: str = ""
     kad_search_date_to: str = ""
 
+    # База данных PostgreSQL
+    database_url: str = "postgresql+asyncpg://poldoma_user:poldoma_pass@localhost:5434/poldoma"
+    db_echo: bool = False
+
 
 settings = Settings()

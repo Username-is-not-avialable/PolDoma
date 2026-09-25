@@ -13,11 +13,15 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class Party(BaseModel):
+class Side(BaseModel):
     name: str
     inn: str | None = None
     address: str | None = None
     role: str  # "plaintiff" | "respondent" | "other"
+
+
+# Псевдоним для обратной совместимости
+Party = Side
 
 
 class Case(BaseModel):
@@ -27,7 +31,18 @@ class Case(BaseModel):
     court: str | None = None
     judge: str | None = None
     start_date: str | None = None
-    parties: list[Party] = Field(default_factory=list)
+    sides: list[Side] = Field(default_factory=list)
+
+    def __init__(self, **data: Any) -> None:
+        # Поддержка parties=... для обратной совместимости
+        if "parties" in data and "sides" not in data:
+            data["sides"] = data.pop("parties")
+        super().__init__(**data)
+
+    @property
+    def parties(self) -> list[Side]:
+        """Обратная совместимость: доступ к сторонам дела как .parties."""
+        return self.sides
 
 
 def extract_records(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -47,8 +62,8 @@ def _first(value: Any) -> Any:
     return value
 
 
-def parse_party(raw: dict[str, Any], role: str) -> Party:
-    return Party(
+def parse_side(raw: dict[str, Any], role: str) -> Side:
+    return Side(
         name=str(raw.get("Name") or raw.get("name") or ""),
         inn=str(raw["Inn"]) if raw.get("Inn") else None,
         address=raw.get("Address"),
@@ -56,12 +71,16 @@ def parse_party(raw: dict[str, Any], role: str) -> Party:
     )
 
 
+# Псевдоним для обратной совместимости
+parse_party = parse_side
+
+
 def parse_case(raw: dict[str, Any]) -> Case:
-    sides = raw.get("Sides") or raw.get("CaseSide") or []
-    parties: list[Party] = []
-    if isinstance(sides, dict):
-        sides = sides.get("Items", [])
-    for side in sides:
+    sides_raw = raw.get("Sides") or raw.get("CaseSide") or []
+    sides: list[Side] = []
+    if isinstance(sides_raw, dict):
+        sides_raw = sides_raw.get("Items", [])
+    for side in sides_raw:
         side_type = (side.get("SideType") or side.get("Type") or side.get("Role") or "").lower()
         if "ист" in side_type or "plaintiff" in side_type:
             role = "plaintiff"
@@ -69,7 +88,7 @@ def parse_case(raw: dict[str, Any]) -> Case:
             role = "respondent"
         else:
             role = "other"
-        parties.append(parse_party(side, role))
+        sides.append(parse_side(side, role))
 
     judge = _first(raw.get("Judges") or raw.get("Judge"))
 
@@ -82,7 +101,7 @@ def parse_case(raw: dict[str, Any]) -> Case:
         else raw.get("Court"),
         judge=str(judge) if judge else None,
         start_date=raw.get("Date") or raw.get("StartDate"),
-        parties=parties,
+        sides=sides,
     )
 
 
@@ -126,7 +145,7 @@ def _node_text(node) -> str:
     return _clean(node.get_text(" "))
 
 
-def _parse_party(span, role: str) -> Party | None:
+def _parse_side(span, role: str) -> Side | None:
     """Сторона из span.js-rollover: strong — имя, текст — адрес, div — реквизиты."""
     from bs4 import NavigableString
 
@@ -150,17 +169,23 @@ def _parse_party(span, role: str) -> Party | None:
     if not name:
         return None
     address = _clean(" ".join(address_parts)) or None
-    return Party(name=name, inn=inn, address=address, role=role)
+    return Side(name=name, inn=inn, address=address, role=role)
 
 
-def _parse_party_cell(cell, role: str) -> list[Party]:
+_parse_party = _parse_side
+
+
+def _parse_side_cell(cell, role: str) -> list[Side]:
     """Все стороны из ячейки plaintiff/respondent."""
-    parties: list[Party] = []
+    sides: list[Side] = []
     for span in cell.select("span.js-rollover"):
-        party = _parse_party(span, role)
-        if party is not None:
-            parties.append(party)
-    return parties
+        side_obj = _parse_side(span, role)
+        if side_obj is not None:
+            sides.append(side_obj)
+    return sides
+
+
+_parse_party_cell = _parse_side_cell
 
 
 def parse_html_cases(html: str) -> list[Case]:
@@ -208,14 +233,14 @@ def parse_html_cases(html: str) -> list[Case]:
             if court_div is not None:
                 court = _clean(court_div.get("title", "")) or _node_text(court_div)
 
-        parties: list[Party] = []
+        sides: list[Side] = []
         for role, selector in (
             ("plaintiff", "td.plaintiff"),
             ("respondent", "td.respondent"),
         ):
             cell = row.select_one(selector)
             if cell is not None:
-                parties.extend(_parse_party_cell(cell, role))
+                sides.extend(_parse_side_cell(cell, role))
 
         cases.append(
             Case(
@@ -225,7 +250,7 @@ def parse_html_cases(html: str) -> list[Case]:
                 court=court,
                 judge=judge,
                 start_date=start_date,
-                parties=parties,
+                sides=sides,
             )
         )
     return cases
