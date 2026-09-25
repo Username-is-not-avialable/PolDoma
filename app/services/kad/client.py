@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import queue
 import threading
 import time
@@ -35,10 +36,6 @@ SEARCH_ENDPOINTS: dict[str, str] = {
 PAGE_LOAD_TIMEOUT_MS = 60_000
 WAIT_AFTER_LOAD_S = 12  # запас на челлендж DDoS-Guard при первом открытии
 REQUEST_TIMEOUT_MS = 60_000
-
-
-class KadCookiesMissing(RuntimeError):
-    """Cookies не найдены — сначала запустите cookie_fetcher."""
 
 
 class KadBlocked(RuntimeError):
@@ -157,10 +154,14 @@ class _BrowserSession:
     """
 
     def __init__(self, headless: bool = False) -> None:
-        # headless игнорируется (см. docstring); параметр оставлен для совместимости.
+        if headless:
+            logging.warning(
+                "KAD: headless-режим не проходит pravocaptcha — API вернёт 451. "
+                "Используйте headed-браузер или Xvfb (см. docs/получение-данных-с-кад.md)"
+            )
         self._pw = sync_playwright().start()
         self._browser = self._pw.chromium.launch(
-            headless=False,
+            headless=headless,
             args=["--disable-blink-features=AutomationControlled"],
         )
         self._context = self._browser.new_context(
@@ -218,7 +219,7 @@ class _PlaywrightWorker:
 
     def _ensure_session(self) -> _BrowserSession:
         if self._session is None or self._session._browser.is_closed():
-            self._session = _BrowserSession(headless=settings.kad_cookie_headless)
+            self._session = _BrowserSession(headless=settings.kad_browser_headless)
         return self._session
 
     def _loop(self) -> None:
@@ -280,7 +281,7 @@ async def search(
 
     result: _SearchResult = await asyncio.to_thread(_get_worker().submit, _do)
     if result.status == 403:
-        raise KadBlocked("403 от КАД — обновите cookies (cookie_fetcher).")
+        raise KadBlocked("403 от КАД — сессия не признана (проверьте pravocaptcha).")
     if result.status == 451:
         raise KadIpBlocked(
             "451 от КАД — доступ с вашего IP ограничен DDoS-Guard "

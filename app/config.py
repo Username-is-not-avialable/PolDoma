@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
@@ -16,8 +12,10 @@ class Settings(BaseSettings):
 
     # КАД
     kad_base_url: str = "https://kad.arbitr.ru"
-    kad_cookie_file: Path = BASE_DIR / "data" / "kad_cookies.json"
-    kad_cookie_headless: bool = True
+    # headless-режим НЕ проходит pravocaptcha (WASM-модуль падает), из-за чего
+    # API отвечает 451. Включать только для отладки; рабочий режим — headed
+    # (реальный дисплей) или Xvfb в контейнере.
+    kad_browser_headless: bool = False
 
     # Диапазон дат поиска (пустые строки = сегодня)
     kad_search_date_from: str = ""
