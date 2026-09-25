@@ -4,15 +4,15 @@ services:
     container_name: poldoma_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-poldoma}
-      POSTGRES_USER: ${POSTGRES_USER:-poldoma_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-poldoma_pass}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB не задан в .env}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER не задан в .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан в .env}
     ports:
       - "5434:5432"
     volumes:
       - poldoma_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-poldoma_user} -d ${POSTGRES_DB:-poldoma}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:?} -d ${POSTGRES_DB:?}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -28,9 +28,7 @@ services:
     env_file:
       - .env
     environment:
-      # Внутри compose-сети БД доступна как хост `db`, порт 5432
-      # (перекрывает DATABASE_URL из .env, где указан localhost:5434)
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-poldoma_user}:${POSTGRES_PASSWORD:-poldoma_pass}@db:5432/${POSTGRES_DB:-poldoma}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@db:5432/${POSTGRES_DB:?}
     ports:
       - "8000:8000"
     # Один контейнер = один процесс = один планировщик. Реплики/воркеры
