@@ -229,3 +229,56 @@ def parse_html_cases(html: str) -> list[Case]:
             )
         )
     return cases
+
+
+# ------------------------- Страница результатов -------------------------
+
+
+class SearchPage(BaseModel):
+    """Одна страница результатов поиска КАД.
+
+    `total`/`pages` КАД отдаёт в скрытых input'ах ответа
+    (documentsTotalCount / documentsPagesCount); для JSON-режима — None.
+    """
+
+    cases: list[Case] = Field(default_factory=list)
+    page: int = 1
+    page_size: int = 25
+    total: int | None = None
+    pages: int | None = None
+    raw: str | None = None      # сырой HTML-фрагмент (для диагностики/--dump)
+
+    @property
+    def has_next(self) -> bool:
+        """Есть ли следующая страница."""
+        if self.pages is None:
+            return False
+        return self.page < self.pages
+
+
+def _hidden_int(soup, element_id: str) -> int | None:
+    tag = soup.find("input", id=element_id)
+    if tag is None:
+        return None
+    try:
+        return int(tag.get("value", ""))
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_search_page(payload: dict[str, Any] | str) -> SearchPage:
+    """Разбор ответа поиска: HTML-страница с пагинацией или JSON-список дел."""
+    if not isinstance(payload, str):
+        return SearchPage(cases=parse_response(payload))
+
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(payload, "html.parser")
+    return SearchPage(
+        cases=parse_html_cases(payload),
+        page=_hidden_int(soup, "documentsPage") or 1,
+        page_size=_hidden_int(soup, "documentsPageSize") or 25,
+        total=_hidden_int(soup, "documentsTotalCount"),
+        pages=_hidden_int(soup, "documentsPagesCount"),
+        raw=payload,
+    )
