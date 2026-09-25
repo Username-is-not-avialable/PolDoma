@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Автоматизация информирования о новых судебных делах (КАД) и передача обращений в Bitrix24"
 requires-python = ">=3.11"
 dependencies = [
+    "aiosmtplib>=3.0",
     "aiosqlite>=0.20",
     "alembic>=1.13",
     "asyncpg>=0.29",
