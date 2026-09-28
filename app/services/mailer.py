@@ -85,6 +85,32 @@ async def send_message(message: EmailMessage) -> dict[str, Any]:
         return {"status": "sent", "response": response}
 
 
+async def send_summary_email(
+    to_email: str,
+    summary_text: str,
+    target_date: str,
+) -> dict[str, Any]:
+    """Отправляет дайджест-сводку о новых делах админу.
+
+    `summary_text` формируется заранее (app.services.summary),
+    здесь — только сборка конверта и отправка через SMTP.
+    """
+    msg = EmailMessage()
+    msg["Subject"] = f"Сводка о новых судебных делах за {target_date}"
+
+    sender_email = settings.smtp_from_email or settings.smtp_user
+    sender_name = settings.smtp_from_name
+    if sender_name and sender_email:
+        username, domain = sender_email.split("@", 1)
+        msg["From"] = str(Address(display_name=sender_name, username=username, domain=domain))
+    else:
+        msg["From"] = sender_email
+
+    msg["To"] = to_email
+    msg.set_content(summary_text, charset="utf-8")
+    return await send_message(msg)
+
+
 async def send_case_notification(
     to_email: str,
     case: KadCase | OrmCase,

@@ -15,6 +15,7 @@ from app.services.mailer import (
     get_case_url,
     send_case_notification,
     send_message,
+    send_summary_email,
 )
 
 
@@ -121,3 +122,28 @@ async def test_send_case_notification_passes_exception():
     ):
         with pytest.raises(aiosmtplib.SMTPException):
             await send_case_notification("test@err.ru", case, "ООО Ошибка")
+
+
+async def test_send_summary_email_builds_and_sends():
+    """Дайджест: тема с датой, тело = готовый текст сводки."""
+    mock_smtp_instance = AsyncMock()
+    mock_smtp_instance.__aenter__.return_value = mock_smtp_instance
+    mock_smtp_instance.login = AsyncMock()
+    mock_smtp_instance.send_message = AsyncMock(return_value="250 OK")
+
+    summary_text = "Сводка о новых судебных делах за 2026-09-25\nВсего новых дел: 3"
+
+    with patch("aiosmtplib.SMTP", return_value=mock_smtp_instance), patch.object(
+        settings, "smtp_user", "user@test.ru"
+    ), patch.object(settings, "smtp_from_email", "sender@test.ru"):
+        res = await send_summary_email(
+            to_email="admin@test.ru",
+            summary_text=summary_text,
+            target_date="2026-09-25",
+        )
+
+    assert res["status"] == "sent"
+    sent = mock_smtp_instance.send_message.call_args.args[0]
+    assert sent["To"] == "admin@test.ru"
+    assert sent["Subject"] == "Сводка о новых судебных делах за 2026-09-25"
+    assert sent.get_content() == summary_text + "\n"

@@ -17,8 +17,9 @@ from app.models.contact import Contact
 from app.models.notification import Notification
 from app.services.kad.client import iter_cases
 from app.services.kad.parser import Case as KadCase
-from app.services.mailer import send_case_notification
+from app.services.mailer import send_case_notification, send_summary_email
 from app.services.matching import match_side_to_contacts
+from app.services.summary import build_summary_text, write_summary
 
 logger = logging.getLogger("monitor")
 
@@ -140,6 +141,7 @@ async def run_monitoring_cycle(
 
         # 2. Итерируемся по типам дел (одна итерация [None] = без фильтра)
         seen_guids: set[str] = set()
+        new_cases: list[KadCase] = []   # для сводки в конце цикла
 
         for c_type in poll_types:
             try:
@@ -163,6 +165,7 @@ async def run_monitoring_cycle(
                         continue
                     if is_new:
                         stats["new_cases_saved"] += 1
+                        new_cases.append(kad_case)
 
                     # 4. Поиск совпадений по ответчикам (матчинг по имени / ФИО).
                     # Матчинг выполняется для всех найденных дел, а дедупликация
@@ -231,6 +234,32 @@ async def run_monitoring_cycle(
             except Exception as exc:  # noqa: BLE001
                 logger.error("Ошибка при опросе КАД (тип=%s): %s", c_type or "все", exc)
                 stats["errors"].append(f"KAD error ({c_type or 'ALL'}): {exc}")
+
+        # 6. Сводка о новых делах: дневной файл + email-дайджест админу
+        if new_cases:
+            try:
+                summary_path = write_summary(new_cases, target_date)
+                stats["summary_file"] = str(summary_path)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Не удалось записать сводку: %s", exc)
+                stats["errors"].append(f"Summary file error: {exc}")
+
+            if settings.summary_email_to:
+                try:
+                    await send_summary_email(
+                        to_email=settings.summary_email_to,
+                        summary_text=build_summary_text(new_cases, target_date),
+                        target_date=target_date,
+                    )
+                    stats["summary_email_sent"] = True
+                    logger.info(
+                        "Дайджест из %s новых дел отправлен на %s",
+                        len(new_cases),
+                        settings.summary_email_to,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.error("Не удалось отправить дайджест: %s", exc)
+                    stats["errors"].append(f"Summary email error: {exc}")
 
         logger.info("Цикл мониторинга КАД завершён: %s", stats)
         return stats

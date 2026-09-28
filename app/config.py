@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     kad_poll_case_types: list[str] = []
     kad_max_pages_per_poll: int = 50
 
+    # Сводка о новых делах: файл + email-дайджест админу
+    summary_reports_dir: str = "data/reports"   # куда писать kad_<дата>.md
+    summary_email_to: str = ""                  # адрес дайджеста; пусто = не отправлять
+
     # SMTP для email-рассылки
     smtp_host: str = "smtp.yandex.ru"
     smtp_port: int = 465

@@ -13,11 +13,20 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import app.services.monitor as monitor
+from app.config import settings
 from app.database import Base
 from app.models.case import Case as OrmCase
 from app.models.contact import Contact
 from app.models.notification import Notification
 from app.services.kad.parser import Case as KadCase, Side as KadSide
+
+
+@pytest.fixture(autouse=True)
+def _summary_dir(tmp_path, monkeypatch):
+    """Сводки в тестах пишутся во временный каталог, не в data/reports."""
+    reports = tmp_path / "reports"
+    monkeypatch.setattr(settings, "summary_reports_dir", str(reports))
+    return reports
 
 
 @pytest.fixture
@@ -414,3 +423,131 @@ async def test_cycle_explicit_case_types_make_one_request_per_type(
 
     assert [c["case_type"] for c in calls] == ["G", "A"]
     assert stats["case_types"] == ["G", "A"]
+
+
+# ------------------------- Сводка о новых делах (файл + дайджест) -------------------------
+
+
+async def test_cycle_writes_summary_file_for_new_cases(session_factory, contact, _summary_dir):
+    """Новые дела попадают в дневной файл сводки."""
+    stats = await _run_with_mocks(
+        session_factory,
+        [make_kad_case()],
+        target_date="2026-09-25",
+        case_types=["G"],
+        courts=["EKATERINBURG"],
+        max_pages=1,
+    )
+
+    assert stats["new_cases_saved"] == 1
+    summary_path = _summary_dir / "kad_2026-09-25.md"
+    assert stats["summary_file"] == str(summary_path)
+    content = summary_path.read_text(encoding="utf-8")
+    assert "А60-100/2026" in content
+    assert 'ООО "РЕМИСТР"' in content
+
+
+async def test_cycle_no_summary_when_no_new_cases(
+    session_factory, contact, _summary_dir, monkeypatch
+):
+    """Повторный цикл без новых дел: файла и дайджеста нет."""
+    summary_mock = AsyncMock(return_value={"status": "sent"})
+    monkeypatch.setattr(settings, "summary_email_to", "admin@example.com")
+    monkeypatch.setattr(monitor, "send_summary_email", summary_mock)
+
+    # 1-й цикл: дело новое → сводка; 2-й: дедуп → новых дел нет
+    first = await _run_with_mocks(
+        session_factory,
+        [make_kad_case()],
+        target_date="2026-09-25",
+        case_types=["G"],
+        courts=["EKATERINBURG"],
+        max_pages=1,
+    )
+    second = await _run_with_mocks(
+        session_factory,
+        [make_kad_case()],
+        target_date="2026-09-25",
+        case_types=["G"],
+        courts=["EKATERINBURG"],
+        max_pages=1,
+    )
+
+    assert "summary_file" in first
+    assert second["new_cases_saved"] == 0
+    assert "summary_file" not in second
+    assert "summary_email_sent" not in second
+    assert summary_mock.await_count == 1
+
+
+async def test_cycle_sends_summary_email_when_configured(
+    session_factory, contact, _summary_dir, monkeypatch
+):
+    """При заданном SUMMARY_EMAIL_TO дайджест отправляется один раз за цикл."""
+    summary_mock = AsyncMock(return_value={"status": "sent"})
+    monkeypatch.setattr(settings, "summary_email_to", "admin@example.com")
+    monkeypatch.setattr(monitor, "send_summary_email", summary_mock)
+
+    stats = await _run_with_mocks(
+        session_factory,
+        [make_kad_case()],
+        target_date="2026-09-25",
+        case_types=["G"],
+        courts=["EKATERINBURG"],
+        max_pages=1,
+    )
+
+    assert stats["summary_email_sent"] is True
+    summary_mock.assert_awaited_once()
+    kwargs = summary_mock.call_args.kwargs
+    assert kwargs["to_email"] == "admin@example.com"
+    assert kwargs["target_date"] == "2026-09-25"
+    assert "А60-100/2026" in kwargs["summary_text"]
+
+
+async def test_cycle_skips_summary_email_when_not_configured(
+    session_factory, contact, _summary_dir, monkeypatch
+):
+    """Пустой SUMMARY_EMAIL_TO — письмо не отправляется, файл пишется."""
+    monkeypatch.setattr(settings, "summary_email_to", "")
+    summary_mock = AsyncMock(return_value={"status": "sent"})
+    monkeypatch.setattr(monitor, "send_summary_email", summary_mock)
+
+    stats = await _run_with_mocks(
+        session_factory,
+        [make_kad_case()],
+        target_date="2026-09-25",
+        case_types=["G"],
+        courts=["EKATERINBURG"],
+        max_pages=1,
+    )
+
+    summary_mock.assert_not_awaited()
+    assert "summary_email_sent" not in stats
+    assert stats["new_cases_saved"] == 1
+    assert (_summary_dir / "kad_2026-09-25.md").exists()
+
+
+async def test_cycle_summary_email_error_recorded_not_fatal(
+    session_factory, contact, _summary_dir, monkeypatch
+):
+    """Ошибка SMTP дайджеста попадает в stats, цикл не падает."""
+    monkeypatch.setattr(settings, "summary_email_to", "admin@example.com")
+    monkeypatch.setattr(
+        monitor, "send_summary_email", AsyncMock(side_effect=RuntimeError("SMTP down"))
+    )
+
+    stats = await _run_with_mocks(
+        session_factory,
+        [make_kad_case()],
+        target_date="2026-09-25",
+        case_types=["G"],
+        courts=["EKATERINBURG"],
+        max_pages=1,
+    )
+
+    assert stats["new_cases_saved"] == 1
+    assert "summary_email_sent" not in stats
+    assert any("Summary email error" in e and "SMTP down" in e for e in stats["errors"])
+    # Файл сводки при этом записан
+    assert (_summary_dir / "kad_2026-09-25.md").exists()
