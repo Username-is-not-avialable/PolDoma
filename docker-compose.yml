@@ -39,6 +39,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    volumes:
+      - ./data/reports:/app/data/reports
 
 volumes:
   poldoma_pgdata:
