@@ -27,7 +27,7 @@ Party = Side
 class Case(BaseModel):
     guid: str
     case_number: str
-    case_type: str | None = None          # И/А/Б
+    case_type: str | None = None          # Г/А/Б
     court: str | None = None
     judge: str | None = None
     start_date: str | None = None
@@ -126,7 +126,7 @@ def parse_response(payload: dict[str, Any] | str) -> list[Case]:
 #   </tr>
 
 _TYPE_BY_CLASS = {
-    "civil": "И",           # гражданское (исковое)
+    "civil": "Г",           # гражданское (как в документации КАД: Г/А/Б)
     "administrative": "А",   # административное
     "bankruptcy": "Б",      # банкротное
 }

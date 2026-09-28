@@ -84,7 +84,7 @@ def test_parse_html_cases_count_and_fields():
     first = cases[0]
     assert first.case_number == "А60-59238/2026"
     assert first.guid == "1fccc72b-9aba-4836-8c1b-e99019aea5c5"
-    assert first.case_type == "И"
+    assert first.case_type == "Г"
     assert first.court == "АС Свердловской области"
     assert first.judge == "Кузьминская О. А."
     assert first.start_date == "22.09.2026 0:00:00"

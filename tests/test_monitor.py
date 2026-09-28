@@ -63,7 +63,7 @@ def make_kad_case(guid: str = "guid-1", number: str = "А60-100/2026") -> KadCas
     return KadCase(
         guid=guid,
         case_number=number,
-        case_type="И",
+        case_type="Г",
         court="АС Свердловской области",
         judge="Иванов И. И.",
         start_date="25.09.2026",

@@ -10,7 +10,7 @@ def _case(guid: str = "guid-1", number: str = "А60-100/2026") -> KadCase:
     return KadCase(
         guid=guid,
         case_number=number,
-        case_type="И",
+        case_type="Г",
         court="АС Свердловской области",
         judge="Иванов И. И.",
         start_date="25.09.2026",
@@ -26,7 +26,7 @@ def test_build_summary_text_contains_key_fields():
 
     assert "за 2026-09-25" in text
     assert "Всего новых дел: 1" in text
-    assert "А60-100/2026 [И]" in text
+    assert "А60-100/2026 [Г]" in text
     assert "АС Свердловской области" in text
     assert 'ООО "РЕМИСТР"' in text          # только ответчики
     assert "ПАО Рога и Копыта" not in text  # истец не попадает в сводку

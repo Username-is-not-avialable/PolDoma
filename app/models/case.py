@@ -23,7 +23,7 @@ class Case(Base):
         String(64), index=True, nullable=False, doc="Номер дела (напр. А60-59233/2026)"
     )
     case_type: Mapped[str | None] = mapped_column(
-        String(16), nullable=True, doc="Тип дела (И/А/Б)"
+        String(16), nullable=True, doc="Тип дела (Г/А/Б)"
     )
     court: Mapped[str | None] = mapped_column(
         String(255), nullable=True, doc="Наименование суда"
