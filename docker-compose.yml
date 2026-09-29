@@ -40,7 +40,7 @@ services:
       retries: 3
       start_period: 30s
     volumes:
-      - ./data/reports:/app/data/reports
+      - ./data:/app/data
 
 volumes:
   poldoma_pgdata:
