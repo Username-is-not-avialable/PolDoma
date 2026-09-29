@@ -33,6 +33,14 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["app*"]
 
+# courts.json — не модуль, а данные справочника судов (читаются через
+# Path(__file__).with_name(...)). Без этого файл не попадает в установленный
+# пакет, и запуск из каталога scripts (например,
+# `docker compose exec app python scripts/kad_smoke.py`) падает с
+# FileNotFoundError: 'app/services/kad/courts.json'.
+[tool.setuptools.package-data]
+"app.services.kad" = ["courts.json"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
